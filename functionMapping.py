@@ -10,9 +10,104 @@ def extract_index_nparray(nparray):
         break
     return index
 
+
+def funcLandmarkDetection(imgpath, midheight):
+
+    LandmarksT = []
+
+    tissueimg = cv.imread(imgpath)
+
+    timg_gray = cv.cvtColor(tissueimg, cv.COLOR_BGR2GRAY)
+    img_gr_mblur = cv.medianBlur(timg_gray, 9)
+    _, thresh = cv.threshold(img_gr_mblur, 20, 255, cv.THRESH_BINARY)
+    kernel = np.ones((11,11),np.uint8)
+    mask = cv.morphologyEx(thresh, cv.MORPH_CLOSE, kernel)
+    wcoords = np.where(mask == 255)
+
+    # Boundaries
+    minr, maxr = min(wcoords[0]), max(wcoords[0])
+    minc, maxc = min(wcoords[1]), max(wcoords[1])
+
+    avgr = int((maxr - minr) / 2) + minr
+    avgc = int((maxc - minc) / 2) + minc
+
+    wcoordstup= list(zip(wcoords[0], wcoords[1]))
+    wcoordstupL = list(filter(lambda x: (x[1] < avgc), wcoordstup))
+    wcoordstupR = list(filter(lambda x: (x[1] > avgc), wcoordstup))
+    wcoordstup.sort(key=lambda x: x[1])
+    wcoordstupL.sort(key=lambda x: x[0])
+    wcoordstupR.sort(key=lambda x: x[0])
+
+    # Point1
+    ptTR = wcoordstupR[0]
+    LandmarksT.append(ptTR)
+
+    midw = 120
+    midh = midheight
+
+    # Point2
+    ptRc = wcoordstup[-1][1]
+    ptRr = [t[0] for t in wcoordstup if t[1] == ptRc][0]
+    ptR = (ptRr, ptRc)
+    LandmarksT.append(ptR)
+
+    # Point3
+    ptRB = wcoordstupR[-1]
+    LandmarksT.append(ptRB)
+
+    # Point4
+    maskmidbott = mask[tissueimg.shape[0] - midh:, avgc - midw:avgc + midw]
+    bcoordsmb = np.where(maskmidbott == 0)
+    bcoordsmbtup = list(zip(bcoordsmb[0], bcoordsmb[1]))
+    bcoordsmbtup.sort(key=lambda x: x[0])
+    pmb = bcoordsmbtup[0]
+    ptMB = (pmb[0] + tissueimg.shape[0] - midh, pmb[1] + avgc - midw)
+    LandmarksT.append(ptMB)
+
+    # Point5
+    ptLB = wcoordstupL[-1]
+    LandmarksT.append(ptLB)
+
+    # Point6
+    ptLc = wcoordstup[0][1]
+    ptLr = [t[0] for t in wcoordstup if t[1] == ptLc][0]
+    ptL = (ptLr, ptLc)
+    LandmarksT.append(ptL)
+
+    # Point7
+    ptTL = wcoordstupL[0]
+    LandmarksT.append(ptTL)
+
+    # Point8
+    maskmidtop = mask[0:midh, avgc - midw:avgc + midw]
+    bcoordsmt = np.where(maskmidtop == 0)
+    bcoordsmttup = list(zip(bcoordsmt[0], bcoordsmt[1]))
+    bcoordsmttup.sort(key=lambda x: x[0])
+    pmt = bcoordsmttup[-1]
+    ptMT = (pmt[0], pmt[1] + avgc - midw)
+    LandmarksT.append(ptMT)
+
+    # Point 9-12
+    rr = int((ptMB[0] - ptMT[0])/5)
+    cc = int((ptMB[1] - ptMT[1])/5)
+    i=1
+    print('Middle Landmarks')
+    for idist in range(1,5):
+        pr = idist * rr + ptMT[0]
+        pc = idist * cc + ptMT[1]
+        cv.putText(tissueimg, str(i), (pc, pr), cv.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1, cv.LINE_AA)
+        LandmarksT.append((int(pr), int(pc)))
+        i += 1
+    #LandmarksT = [(100, 100), (800, 100),(100, 1200), (800, 1200)]
+
+    return LandmarksT
+
+
 def funcMapping(savepath, source_img_path, target_img_path, source_lms, target_lms):
     print("source_lms", source_lms)
     print("target_lms", target_lms)
+
+    print("source_img_path", source_img_path)
     target_img = cv.imread(target_img_path)  # Atlas image   ################
     source_img = cv.imread(source_img_path)  # Section image
     target_gray = cv.cvtColor(target_img, cv.COLOR_BGR2GRAY)
@@ -20,14 +115,27 @@ def funcMapping(savepath, source_img_path, target_img_path, source_lms, target_l
     mask = np.zeros_like(target_gray)
     height, width, channels = target_img.shape
     target_new_hull = np.zeros((height, width, channels), np.uint8)
-    # target
-    #source_landmark_points, target_landmark_points = convert_lm_points_scale(source_lms, target_lms)
-    source_landmark_points, target_landmark_points = source_lms, target_lms  ################
+
+    source_additional_lms = funcLandmarkDetection(source_img_path, 200)
+    target_additional_lms = funcLandmarkDetection(target_img_path, 200)
+
+    source_lms.extend(source_additional_lms)
+    target_lms.extend(target_additional_lms)
+
+    source_landmark_points = []
+    target_landmark_points = []
+
+    for point in source_lms:
+        source_landmark_points.append((point[1], point[0]))
+
+    for point in target_lms:
+        target_landmark_points.append((point[1], point[0]))
+
     points = np.array(target_landmark_points, np.int32)    
     convexhull = cv.convexHull(points)
     rect = cv.boundingRect(convexhull)
     save_target_lm_points = np.array(target_landmark_points, np.int32)
-    # Delaunay triangulation
+    print(source_img.shape)
     subdiv = cv.Subdiv2D(rect)
     for p in target_landmark_points:
         subdiv.insert(p)
@@ -116,8 +224,8 @@ def funcMapping(savepath, source_img_path, target_img_path, source_lms, target_l
     target_hull_mask = cv.bitwise_not(target_inv_hull_mask)
     target_nohull = cv.bitwise_and(target_img, target_img, mask=target_hull_mask)
     registered_img = cv.add(target_nohull, target_new_hull)
-    delauney_reg_img_path = os.path.join(savepath, 'registered_img.png')
+    delauney_reg_img_path = os.path.join(savepath, 'images', 'registered_img.png')
     cv.imwrite(delauney_reg_img_path, registered_img)
 
     # cv.imwrite(os.path.join(path, 'mappingresult.jpg'), result_img)
-    return delauney_reg_img_path
+    return registered_img

@@ -7,12 +7,11 @@ from PyQt5.QtWidgets import (QAction, QApplication, QFileDialog, QLabel,
                              QPushButton, QWidget, QTextEdit, QDialog, QLineEdit, QInputDialog)
 import cv2 as cv
 from functionMapping import *
+from funcLandmarkDetection import *
 
 gPath = "."
-gFirstFileName = "images/target_img.png"
-gSecondFileName = "images/source_img.png"
-#gFirstFileName = "images/image1.jpg"
-#gSecondFileName = "images/image2.jpg"
+gFirstFileName = "image1.jpg"
+gSecondFileName = "image2.jpg"
 
 class MyLabel(QLabel):
     mouseMove = pyqtSignal(int, int)
@@ -25,7 +24,7 @@ class MyLabel(QLabel):
         self.isClickable = isClickable
         self.imageFile = imageFile
         self.landmarksCount = landmarksCount
-        print("landmarksCount ", landmarksCount)
+
         # data
         self.points = []
         self.scaleFactor = 1
@@ -82,7 +81,7 @@ class MyLabel(QLabel):
         openAction = contextMenu.addAction("Open...")
         landmarksAction = contextMenu.addAction("Landmarks...")
         action = contextMenu.exec_(self.mapToGlobal(event.pos()))
-        print("action ", action)
+
         if action == openAction:
             options = QFileDialog.Options()
             options |= QFileDialog.DontUseNativeDialog
@@ -91,11 +90,19 @@ class MyLabel(QLabel):
             if fileName:
                 self.imageFile = fileName
                 self.openImage()
-            print("open action ")
+
         elif action == landmarksAction:
             count, okPressed = QInputDialog.getInt(self, "Input", "Landmarks Count:", self.landmarksCount, 1, 1000, 1)
-            print("count, okPressed ",count, okPressed)
-            print("LM action ")
+            if okPressed:
+                coord = funcLandmarkDetection(self.imageFile, count)
+                print(coord)
+
+                for pos in coord:
+                    pos = QPoint(pos[1], pos[0])
+                    self.points.append(pos)
+                    self.mouseClicked.emit(pos.x(), pos.y())
+
+                self.update()
 
     def paintEvent(self, QPaintEvent):
         super().paintEvent(QPaintEvent)
@@ -133,7 +140,6 @@ class MyLabel(QLabel):
             y = point.y() / self.scaleFactor
 
             # Biase the x, y
-            
             if x < midWidth:
                 x -= 15
             else:
@@ -210,7 +216,7 @@ class MainWindow(QMainWindow):
 
         # image layout
         layout1 = QHBoxLayout()
-        self.imageLabel1 = MyLabel(True, gFirstFileName, 400)
+        self.imageLabel1 = MyLabel(True, gFirstFileName, 200)
         self.imageLabel1.setScaledContents(False)
         self.imageLabel1.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
 
@@ -302,16 +308,16 @@ class MainWindow(QMainWindow):
 
 
     def image1MouseClicked(self, x, y):
-        self.textEdit1.append("(%d, %d)" % (y, x))
+        self.textEdit1.append("(%d, %d)" % (x, y))
         self.textEdit1.moveCursor(QTextCursor.End)
 
-        self.img1coords.append((y, x))
+        self.img1coords.append((x, y))
 
     def image2MouseClicked(self, x, y):
-        self.textEdit2.append("(%d, %d)" % (y, x))
+        self.textEdit2.append("(%d, %d)" % (x, y))
         self.textEdit2.moveCursor(QTextCursor.End)
 
-        self.img2coords.append((y, x))
+        self.img2coords.append((x, y))
 
     def on_doneButton_clicked(self):
         resultDialog = ResultDialog(self)
@@ -328,19 +334,19 @@ class MainWindow(QMainWindow):
 
     def mergeImage(self):
         # test
-        #self.img1coords = [(20, 646), (0, 725), (22, 804), (38, 883), (69, 962), (124, 1041), (185, 1098), (247, 1124), (349, 1107), (449, 1067), (481, 1008), (600, 949), (645, 890), (648, 831), (710, 772), (726, 713), (704, 654), (597, 590), (724, 531), (732, 472), (725, 413), (710, 354), (673, 295), (642, 236), (587, 177), (568, 118), (455, 7), (342, 0), (255, 64), (168, 81), (115, 162), (75, 243), (62, 324), (40, 405), (66, 486), (190, 567), (271, 571), (352, 575), (433, 579), (514, 583)]
-        #self.img2coords = [(184, 775), (176, 835), (191, 895), (216, 955), (249, 1015), (307, 1075), (375, 1119), (443, 1136), (519, 1122), (596, 1089), (684, 1042), (724, 995), (751, 948), (774, 901), (800, 854), (819, 807), (812, 760), (760, 710), (813, 663), (818, 616), (800, 569), (774, 522), (751, 475), (723, 428), (682, 381), (593, 334), (510, 301), (427, 290), (367, 311), (307, 350), (249, 410), (215, 470), (190, 530), (175, 590), (184, 650), (253, 715), (354, 714), (455, 713), (556, 712), (657, 711)]
+        # self.img1coords = [(20, 646), (0, 725), (22, 804), (38, 883), (69, 962), (124, 1041), (185, 1098), (247, 1124), (349, 1107), (449, 1067), (481, 1008), (600, 949), (645, 890), (648, 831), (710, 772), (726, 713), (704, 654), (597, 590), (724, 531), (732, 472), (725, 413), (710, 354), (673, 295), (642, 236), (587, 177), (568, 118), (455, 7), (342, 0), (255, 64), (168, 81), (115, 162), (75, 243), (62, 324), (40, 405), (66, 486), (190, 567), (271, 571), (352, 575), (433, 579), (514, 583)]
+        # self.img2coords = [(184, 775), (176, 835), (191, 895), (216, 955), (249, 1015), (307, 1075), (375, 1119), (443, 1136), (519, 1122), (596, 1089), (684, 1042), (724, 995), (751, 948), (774, 901), (800, 854), (819, 807), (812, 760), (760, 710), (813, 663), (818, 616), (800, 569), (774, 522), (751, 475), (723, 428), (682, 381), (593, 334), (510, 301), (427, 290), (367, 311), (307, 350), (249, 410), (215, 470), (190, 530), (175, 590), (184, 650), (253, 715), (354, 714), (455, 713), (556, 712), (657, 711)]
 
         # merge
         self.resultImage = funcMapping(gPath, self.imageLabel1.imageFile, self.imageLabel2.imageFile,
                                   self.img1coords, self.img2coords)
 
         # display
-        mergedImage = QImage(self.resultImage.data, self.resultImage.shape[0], self.resultImage.shape[1],
+        mergedImage = QImage(self.resultImage.data, self.resultImage.shape[1], self.resultImage.shape[0],
                                   QImage.Format_RGB888).rgbSwapped()
         mergedPixmap = QPixmap.fromImage(mergedImage)
 
-        return
+        return mergedPixmap
 
     def save(self):
         # Save fil dialog
